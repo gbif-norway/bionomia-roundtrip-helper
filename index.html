@@ -7,14 +7,14 @@
   <style>
     body { font-family: sans-serif; }
     div {
-      max-width: 800px; 
+      max-width: 800px;
       margin: 0 auto;
-      padding: 3rem 0; 
+      padding: 3rem 0;
       --bd-pink-rgb: 214,51,132;
       background-image: linear-gradient(180deg, rgba(var(--bs-body-bg-rgb), 0.01), rgba(var(--bs-body-bg-rgb), 1) 85%),radial-gradient(ellipse at top left, rgba(var(--bs-primary-rgb), 0.5), transparent 50%),radial-gradient(ellipse at top right, rgba(var(--bd-accent-rgb), 0.5), transparent 50%),radial-gradient(ellipse at center right, rgba(var(--bd-violet-rgb), 0.5), transparent 50%),radial-gradient(ellipse at center left, rgba(var(--bd-pink-rgb), 0.5), transparent 50%);
     }
     h1 {
-      font-size: 4rem; 
+      font-size: 4rem;
     }
     h2 { font-size: 2.5rem; color: #515151; line-height: 3rem; font-weight: normal; }
     label { margin-right: 5px; }
@@ -30,13 +30,13 @@
     <h1>Roundtrip helper</h1>
     <h2>Find recordedByIDs & identifiedByIDs present in Bionomia, but missing from GBIF source data</h2>
     <form id="datasetForm">
-      <label>Dataset</label><input type="text" name="datasetID" style="width: 300px" />
+      <label>Dataset</label><input type="text" name="datasetID" style="width: 300px" placeholder="7948250c-6958-4a29-a670-ed1015b26252"/>
       <input type="submit" value="Download missing annotations">
     </form>
   </div>
 
   <script>
-    function findMismatches(form) { 
+    function findMismatches(form) {
       var formData = new FormData(form);
       var dataset = formData.get('datasetID'); // 'e73369d9-fa93-47f9-932c-e101b6dd8507'
 
@@ -48,11 +48,11 @@
                 return Promise.reject(new Error(response.statusText));
             }
         })
-        .then(JSZip.loadAsync) 
+        .then(JSZip.loadAsync)
         .then(function (zip) {
           return zip.file('occurrences.csv').async("string");
         })
-        .then(function success(gbifRaw) { 
+        .then(function success(gbifRaw) {
           var gbif = Papa.parse(gbifRaw, {delimiter: ",", header: true});
           var objs = [{'catalogNumber': '', 'occurrenceID': '', 'id': '', 'id_type': ''}];
           gbif.data.forEach(function(obj) {
@@ -91,11 +91,11 @@
                     return Promise.reject(new Error(response.statusText));
                 }
             })
-            .then(JSZip.loadAsync) 
+            .then(JSZip.loadAsync)
             .then(function (zip) {
               return zip.file('attributions.csv').async("string");
             })
-            .then(function success(attributionsRaw) { 
+            .then(function success(attributionsRaw) {
               var attributions = Papa.parse(attributionsRaw, {delimiter: ",", header: true});
               var objs = [];
               attributions.data.forEach(function(obj) {
@@ -140,7 +140,7 @@
             })
         })
       }
-    
+
     const form = document.getElementById("datasetForm");
 
     form.addEventListener("submit", (e) => {
