@@ -226,7 +226,7 @@
             })
             .then(function success(attributionsRaw) {
               var attributions = Papa.parse(attributionsRaw, {delimiter: ",", header: true});
-              var objs = [];
+              var objs = [{'occurrenceID': '', 'id': '', 'id_type': ''}];
               attributions.data.forEach(function(obj) {
                 if('identifiedBy' in obj && obj.identifiedBy != '') {
                   objs.push({
