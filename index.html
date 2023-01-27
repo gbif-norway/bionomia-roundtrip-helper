@@ -1,0 +1,153 @@
+<!doctype html>
+<html class="no-js" lang="">
+
+<head>
+  <meta charset="utf-8">
+  <title>Attributions in Bionomia missing from GBIF source data</title>
+  <style>
+    body { font-family: sans-serif; }
+    div {
+      max-width: 800px; 
+      margin: 0 auto;
+      padding: 3rem 0; 
+      --bd-pink-rgb: 214,51,132;
+      background-image: linear-gradient(180deg, rgba(var(--bs-body-bg-rgb), 0.01), rgba(var(--bs-body-bg-rgb), 1) 85%),radial-gradient(ellipse at top left, rgba(var(--bs-primary-rgb), 0.5), transparent 50%),radial-gradient(ellipse at top right, rgba(var(--bd-accent-rgb), 0.5), transparent 50%),radial-gradient(ellipse at center right, rgba(var(--bd-violet-rgb), 0.5), transparent 50%),radial-gradient(ellipse at center left, rgba(var(--bd-pink-rgb), 0.5), transparent 50%);
+    }
+    h1 {
+      font-size: 4rem; 
+    }
+    h2 { font-size: 2.5rem; color: #515151; line-height: 3rem; font-weight: normal; }
+    label { margin-right: 5px; }
+  </style>
+</head>
+
+<body>
+  <script src="https://cdn.jsdelivr.net/npm/danfojs@1.1.2/lib/bundle.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <div>
+    <h1>Roundtrip helper</h1>
+    <h2>Find recordedByIDs & identifiedByIDs present in Bionomia, but missing from GBIF source data</h2>
+    <form id="datasetForm">
+      <label>Dataset</label><input type="text" name="datasetID" style="width: 300px" />
+      <input type="submit" value="Download missing annotations">
+    </form>
+  </div>
+
+  <script>
+    function findMismatches(form) { 
+      var formData = new FormData(form);
+      var dataset = formData.get('datasetID'); // 'e73369d9-fa93-47f9-932c-e101b6dd8507'
+
+      fetch('https://bionomia.net/dataset/' + dataset + '/occurrences.csv.zip')
+        .then(function (response) {
+          if (response.status === 200 || response.status === 0) {
+                return Promise.resolve(response.blob());
+            } else {
+                return Promise.reject(new Error(response.statusText));
+            }
+        })
+        .then(JSZip.loadAsync) 
+        .then(function (zip) {
+          return zip.file('occurrences.csv').async("string");
+        })
+        .then(function success(gbifRaw) { 
+          var gbif = Papa.parse(gbifRaw, {delimiter: ",", header: true});
+          var objs = [{'catalogNumber': '', 'occurrenceID': '', 'id': '', 'id_type': ''}];
+          gbif.data.forEach(function(obj) {
+            if('identifiedByID' in obj && obj.identifiedByID != '') {
+              obj.identifiedByID.split('|').forEach(function(id) {
+                objs.push({
+                  'catalogNumber': obj.catalogNumber,
+                  'occurrenceID': obj.gbifID, //'occurrenceID': obj.occurrenceID,
+                  'id': id.trim(),
+                  'id_type': 'identifiedBy'
+                })
+              })
+            }
+            if('recordedByID' in obj && obj.recordedByID != '') {
+              obj.recordedByID.split('|').forEach(function(id) {
+                objs.push({
+                  'catalogNumber': obj.catalogNumber,
+                  'occurrenceID': obj.gbifID,
+                  'id': id.trim(),
+                  'id_type': 'recordedBy'
+                })
+              })
+            }
+          })
+          gbif = new dfd.DataFrame(objs, { config: { tableDisplayConfig: { columns: [{}, {}, {}, { width: 50 }] } } })
+          console.log('GBIF data')
+          gbif.print()
+          return gbif
+        })
+        .then(function (gbif) {
+          fetch('https://bionomia.net/dataset/' + dataset + '/attributions.csv.zip')
+            .then(function (response) {
+              if (response.status === 200 || response.status === 0) {
+                    return Promise.resolve(response.blob());
+                } else {
+                    return Promise.reject(new Error(response.statusText));
+                }
+            })
+            .then(JSZip.loadAsync) 
+            .then(function (zip) {
+              return zip.file('attributions.csv').async("string");
+            })
+            .then(function success(attributionsRaw) { 
+              var attributions = Papa.parse(attributionsRaw, {delimiter: ",", header: true});
+              var objs = [];
+              attributions.data.forEach(function(obj) {
+                if('identifiedBy' in obj && obj.identifiedBy != '') {
+                  objs.push({
+                    'occurrenceID': obj.occurrence_id,
+                    'id': obj.identifiedBy.trim(),
+                    'id_type': 'identifiedBy'
+                  })
+                }
+                if('recordedBy' in obj && obj.recordedBy != '') {
+                  objs.push({
+                    'occurrenceID': obj.occurrence_id,
+                    'id': obj.recordedBy.trim(),
+                    'id_type': 'recordedBy'
+                  })
+                }
+              })
+              bionomia = new dfd.DataFrame(objs, { config: { tableDisplayConfig: { columns: [{}, {}, { width: 50 }] } } })
+              console.log('Bionomia data')
+              bionomia.print()
+
+              // left join from attributions df to occs, on attributions.occurrence_id = occurrences.gbifID
+              return dfd.merge({ left: bionomia, right: gbif, on: ['occurrenceID', 'id', 'id_type'], how: 'left', config: { tableDisplayConfig: { columns: [{}, {}, {}, { width: 50 }] } } })
+            })
+            .then(function (merged){
+              console.log('merged')
+              merged.print()
+              // merged.query(merged['occurrenceID'].eq('919230507')).print()
+              // console.log('gbif')
+              // gbif.query(gbif['occurrenceID'].eq('919230507')).print()
+              // console.log('bionomia')
+              // bionomia.query(bionomia['occurrenceID'].eq('919230507')).print()
+              // console.log('starting filtering')
+              //merged.fillNa('MISSING')
+              filtered = merged.query(merged['catalogNumber'].isNa())
+              //filtered = merged.query(merged['catalogNumber'].eq(NaN))
+              //filtered = merged.dropNa(axis=1)
+              console.log('filtered')
+              filtered.print()
+              dfd.toCSV(filtered, { fileName: dataset + '-mismatches.csv', download: true })
+            })
+        })
+      }
+    
+    const form = document.getElementById("datasetForm");
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      findMismatches(e.target);
+    });
+  </script>
+</body>
+
+</html>
