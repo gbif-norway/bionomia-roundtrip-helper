@@ -157,24 +157,29 @@
       <label>Dataset</label><input type="text" name="datasetID" style="width: 300px" placeholder="7948250c-6958-4a29-a670-ed1015b26252"/>
       <input type="submit" value="Download missing annotations">
     </form>
+    <p id="error" style="visibility: hidden; color: red">No bionomia attributions available for this dataset.</p>
   </div>
 
   <script>
     var loadingDiv = document.getElementById('loading');
     function showSpinner() { loadingDiv.style.visibility = 'visible'; }
     function hideSpinner() { loadingDiv.style.visibility = 'hidden'; }
+    var errorMessage = document.getElementById('error');
+    function showError() { errorMessage.style.visibility = 'visible'; }
+    function hideError() { errorMessage.style.visibility = 'hidden'; }
 
     function findMismatches(form) {
+      hideError();
+      showSpinner();
       var formData = new FormData(form);
       var dataset = formData.get('datasetID'); // 'e73369d9-fa93-47f9-932c-e101b6dd8507'
-      showSpinner();
 
       fetch('https://bionomia.net/dataset/' + dataset + '/occurrences.csv.zip')
         .then(function (response) {
           if (response.status === 200 || response.status === 0) {
-                return Promise.resolve(response.blob());
+              return Promise.resolve(response.blob());
             } else {
-                return Promise.reject(new Error(response.statusText));
+              return Promise.reject(new Error('Missing occurrences csv'));
             }
         })
         .then(JSZip.loadAsync)
@@ -215,9 +220,9 @@
           fetch('https://bionomia.net/dataset/' + dataset + '/attributions.csv.zip')
             .then(function (response) {
               if (response.status === 200 || response.status === 0) {
-                    return Promise.resolve(response.blob());
+                  return Promise.resolve(response.blob());
                 } else {
-                    return Promise.reject(new Error(response.statusText));
+                  return Promise.reject(new Error('Missing attributions csv'));
                 }
             })
             .then(JSZip.loadAsync)
@@ -253,7 +258,9 @@
             .then(function (merged){
               console.log('merged')
               merged.print()
-              filtered = merged.query(merged['catalogNumber'].isNa())
+              filtered = merged.query(merged['catalogNumber'].isNa()).drop({ columns: ['catalogNumber'] })
+              filtered = filtered.asType('occurrenceID', 'string')
+              filtered.addColumn('gbifURL', filtered['occurrenceID'].str.concat('https://www.gbif.org/occurrence/', 0), { inplace: true });
               console.log('filtered')
               filtered.print()
               dfd.toCSV(filtered, { fileName: dataset + '-mismatches.csv', download: true })
@@ -261,6 +268,11 @@
             .then(function (){
               hideSpinner();
             })
+        })
+        .catch(e => {
+          hideSpinner();
+          showError();
+          console.log(e);
         })
       }
 
