@@ -174,7 +174,7 @@
       var formData = new FormData(form);
       var dataset = formData.get('datasetID'); // 'e73369d9-fa93-47f9-932c-e101b6dd8507'
 
-      fetch('https://bionomia.net/dataset/' + dataset + '/occurrences.csv.zip')
+      var gbif = fetch('https://bionomia.net/dataset/' + dataset + '/occurrences.csv.zip')
         .then(function (response) {
           if (response.status === 200 || response.status === 0) {
               return Promise.resolve(response.blob());
@@ -216,68 +216,74 @@
           gbif.print()
           return gbif
         })
-        .then(function (gbif) {
-          fetch('https://bionomia.net/dataset/' + dataset + '/attributions.csv.zip')
-            .then(function (response) {
-              if (response.status === 200 || response.status === 0) {
-                  return Promise.resolve(response.blob());
-                } else {
-                  return Promise.reject(new Error('Missing attributions csv'));
-                }
-            })
-            .then(JSZip.loadAsync)
-            .then(function (zip) {
-              return zip.file('attributions.csv').async("string");
-            })
-            .then(function success(attributionsRaw) {
-              var attributions = Papa.parse(attributionsRaw, {delimiter: ",", header: true});
-              var objs = [{'occurrenceID': '', 'id': '', 'id_type': ''}];
-              attributions.data.forEach(function(obj) {
-                if('identifiedBy' in obj && obj.identifiedBy != '') {
-                  objs.push({
-                    'occurrenceID': obj.occurrence_id,
-                    'id': obj.identifiedBy.trim(),
-                    'id_type': 'identifiedBy'
-                  })
-                }
-                if('recordedBy' in obj && obj.recordedBy != '') {
-                  objs.push({
-                    'occurrenceID': obj.occurrence_id,
-                    'id': obj.recordedBy.trim(),
-                    'id_type': 'recordedBy'
-                  })
-                }
-              })
-              bionomia = new dfd.DataFrame(objs, { config: { tableDisplayConfig: { columns: [{}, {}, { width: 50 }] } } })
-              console.log('Bionomia data')
-              bionomia.print()
+        .catch(e => {
+          hideSpinner();
+          showError();
+          console.log(e);
+          return;
+        })
 
-              // left join from attributions df to occs, on attributions.occurrence_id = occurrences.gbifID
-              return dfd.merge({ left: bionomia, right: gbif, on: ['occurrenceID', 'id', 'id_type'], how: 'left', config: { tableDisplayConfig: { columns: [{}, {}, {}, { width: 50 }] } } })
-            })
-            .then(function (merged){
-              console.log('merged')
-              merged.print()
-              filtered = merged.query(merged['catalogNumber'].isNa()).drop({ columns: ['catalogNumber'] })
-              filtered = filtered.asType('occurrenceID', 'string')
-              filtered.addColumn('gbifURL', filtered['occurrenceID'].str.concat('https://www.gbif.org/occurrence/', 0), { inplace: true });
-              console.log('filtered')
-              filtered.print()
-              dfd.toCSV(filtered, { fileName: dataset + '-mismatches.csv', download: true })
-            })
-            .then(function (){
-              hideSpinner();
-            })
+      var bionomia = fetch('https://bionomia.net/dataset/' + dataset + '/attributions.csv.zip')
+        .then(function (response) {
+          if (response.status === 200 || response.status === 0) {
+              return Promise.resolve(response.blob());
+            } else {
+              return Promise.reject(new Error('Missing attributions csv'));
+            }
+        })
+        .then(JSZip.loadAsync)
+        .then(function (zip) {
+          return zip.file('attributions.csv').async("string");
+        })
+        .then(function success(attributionsRaw) {
+          var attributions = Papa.parse(attributionsRaw, {delimiter: ",", header: true});
+          var objs = [{'occurrenceID': '', 'id': '', 'id_type': ''}];
+          attributions.data.forEach(function(obj) {
+            if('identifiedBy' in obj && obj.identifiedBy != '') {
+              objs.push({
+                'occurrenceID': obj.occurrence_id,
+                'id': obj.identifiedBy.trim(),
+                'id_type': 'identifiedBy'
+              })
+            }
+            if('recordedBy' in obj && obj.recordedBy != '') {
+              objs.push({
+                'occurrenceID': obj.occurrence_id,
+                'id': obj.recordedBy.trim(),
+                'id_type': 'recordedBy'
+              })
+            }
+          })
+          bionomia = new dfd.DataFrame(objs, { config: { tableDisplayConfig: { columns: [{}, {}, { width: 50 }] } } })
+          console.log('Bionomia data');
+          bionomia.print();
+          return bionomia;
         })
         .catch(e => {
           hideSpinner();
           showError();
           console.log(e);
+          return;
         })
+      console.log(gbif);
+      if(gbif && bionomia) {
+        console.log('running')
+        var merged = dfd.merge({ left: bionomia, right: gbif, on: ['occurrenceID', 'id', 'id_type'], how: 'left', config: { tableDisplayConfig: { columns: [{}, {}, {}, { width: 50 }] } } })
+
+        console.log('merged')
+        merged.print()
+        filtered = merged.query(merged['catalogNumber'].isNa()).drop({ columns: ['catalogNumber'] })
+        filtered = filtered.asType('occurrenceID', 'string')
+        filtered.addColumn('gbifURL', filtered['occurrenceID'].str.concat('https://www.gbif.org/occurrence/', 0), { inplace: true });
+        console.log('filtered')
+        filtered.print()
+        dfd.toCSV(filtered, { fileName: dataset + '-mismatches.csv', download: true })
+
+        hideSpinner();
       }
+    }
 
     const form = document.getElementById("datasetForm");
-
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       findMismatches(e.target);
